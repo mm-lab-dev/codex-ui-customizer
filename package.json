@@ -1,0 +1,124 @@
+{
+  "name": "codex-ui-customizer",
+  "displayName": "Codex UI Customizer (Unofficial)",
+  "description": "Customize the OpenAI Codex VS Code UI, including user message styling and Remote-SSH sessions.",
+  "version": "0.2.0",
+  "publisher": "mm-lab",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mm-lab-dev/codex-ui-customizer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mm-lab-dev/codex-ui-customizer/issues"
+  },
+  "homepage": "https://github.com/mm-lab-dev/codex-ui-customizer#readme",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Workspace-defined UI customization values are disabled in Restricted Mode.",
+      "restrictedConfigurations": [
+        "codexUiCustomizer.autoApply",
+        "codexUiCustomizer.userMessage.background",
+        "codexUiCustomizer.userMessage.borderColor",
+        "codexUiCustomizer.userMessage.borderWidth",
+        "codexUiCustomizer.userMessage.borderRadius"
+      ]
+    }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:codexUiCustomizer.apply",
+    "onCommand:codexUiCustomizer.remove",
+    "onCommand:codexUiCustomizer.showTarget"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codexUiCustomizer.apply",
+        "title": "Codex UI Customizer: Apply"
+      },
+      {
+        "command": "codexUiCustomizer.remove",
+        "title": "Codex UI Customizer: Remove"
+      },
+      {
+        "command": "codexUiCustomizer.showTarget",
+        "title": "Codex UI Customizer: Show Target"
+      }
+    ],
+    "configuration": {
+      "title": "Codex UI Customizer",
+      "properties": {
+        "codexUiCustomizer.autoApply": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply UI customizations automatically when the extension activates."
+        },
+        "codexUiCustomizer.userMessage.background": {
+          "type": "string",
+          "default": "#173e76",
+          "pattern": "^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]|[0-9a-fA-F]{3}|[0-9a-fA-F]{5})?$",
+          "patternErrorMessage": "Use a 3, 4, 6, or 8 digit hexadecimal color.",
+          "description": "Background color for user message bubbles, as a hexadecimal color."
+        },
+        "codexUiCustomizer.userMessage.borderColor": {
+          "type": "string",
+          "default": "#3d4654",
+          "pattern": "^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]|[0-9a-fA-F]{3}|[0-9a-fA-F]{5})?$",
+          "patternErrorMessage": "Use a 3, 4, 6, or 8 digit hexadecimal color.",
+          "description": "Border color for user message bubbles, as a hexadecimal color."
+        },
+        "codexUiCustomizer.userMessage.borderWidth": {
+          "type": "string",
+          "default": "1px",
+          "pattern": "^(?:0|(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:px|rem|em))$",
+          "patternErrorMessage": "Use 0 or a non-negative length in px, rem, or em.",
+          "description": "Border width for user message bubbles. Supports px, rem, and em."
+        },
+        "codexUiCustomizer.userMessage.borderRadius": {
+          "type": "string",
+          "default": "10px",
+          "pattern": "^(?:0|(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:px|rem|em))$",
+          "patternErrorMessage": "Use 0 or a non-negative length in px, rem, or em.",
+          "description": "Border radius for user message bubbles. Supports px, rem, and em."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "icon": "resources/icon.png",
+  "keywords": [
+    "codex",
+    "openai",
+    "chat",
+    "ui",
+    "theme",
+    "customize",
+    "style",
+    "remote-ssh",
+    "webview"
+  ],
+  "galleryBanner": {
+    "color": "#173e76",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "devDependencies": {
+    "@vscode/vsce": "3.9.2"
+  }
+}

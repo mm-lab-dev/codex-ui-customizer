@@ -1,0 +1,8 @@
+*.zip
+*.vsix
+.git/**
+.gitignore
+.github/**
+PUBLISHING.md
+resources/large-icon.png
+test/**
