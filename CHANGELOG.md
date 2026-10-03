@@ -1,5 +1,9 @@
 # Change Log
 
+## 0.2.1
+
+- Update the extension packaging tool and refresh its dependencies to address reported vulnerabilities.
+
 ## 0.2.0
 
 - Rename project to **Codex UI Customizer (Unofficial)**.

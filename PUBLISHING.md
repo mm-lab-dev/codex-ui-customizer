@@ -29,7 +29,12 @@ The Marketplace repository, issue tracker, and homepage are configured as:
 
 ## 3. Package and inspect
 
+Use Node.js 22 or newer for the packaging tool.
+
 ```bash
+npm ci
+npm test
+npm audit
 npx @vscode/vsce ls
 npm run package
 ```

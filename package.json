@@ -2,7 +2,7 @@
   "name": "codex-ui-customizer",
   "displayName": "Codex UI Customizer (Unofficial)",
   "description": "Customize the OpenAI Codex VS Code UI, including user message styling and Remote-SSH sessions.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "mm-lab",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
@@ -119,6 +119,6 @@
   },
   "pricing": "Free",
   "devDependencies": {
-    "@vscode/vsce": "3.9.2"
+    "@vscode/vsce": "4.0.0"
   }
 }
