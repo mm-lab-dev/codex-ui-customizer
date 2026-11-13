@@ -25,7 +25,8 @@ The first available customization is styling for **user message bubbles**. The e
 - Automatically detects the installed `openai.chatgpt` extension
 - Does not hard-code Codex version numbers
 - Does not hard-code `.vscode-server` paths
-- Automatically finds hashed `app-initial-*.css` assets
+- Finds CSS through the WebView HTML's stylesheet references, including hash-only filenames
+- Validates every referenced stylesheet before applying changes; stops on unsupported layouts
 - Prevents duplicate style injection
 - Creates a backup before modifying Codex CSS
 - Restores the original CSS with the `Remove` command
@@ -129,8 +130,12 @@ Displays diagnostic information in the Output panel, including:
 
 - current extension host
 - detected Codex installation path
+- detected Codex version
 - Codex WebView assets path
-- CSS files being patched
+- reference HTML and detection method
+- CSS files being patched and their original `href` references, in HTML order
+
+If detection fails, the command opens the Output panel with the failure reason.
 
 ```text
 Codex UI Customizer: Show Target
@@ -211,15 +216,27 @@ The extension:
    webview/assets/
    ```
 
-4. Finds CSS assets matching:
+4. Reads `webview/index.html` and resolves explicit stylesheet links, for example:
 
-   ```text
-   app-initial-*.css
+   ```html
+   <link rel="stylesheet" href="./assets/app-initial-aad627bd9dff.css">
+   <link rel="stylesheet" href="./assets/c33752c5468c.css">
    ```
 
-5. Creates a backup of each target CSS file before modification.
+   Filenames do not determine eligibility. Comments, module preloads, and CSS
+   names in JavaScript dependency tables are not used as targets. References are
+   kept in HTML order and duplicate files are patched only once.
+
+5. Validates all references before writing, then creates a backup of each target CSS file before modification.
 6. Adds a clearly marked customization block.
 7. Avoids adding the same customization more than once.
+
+Referenced files must exist and resolve to regular CSS files within `webview/`,
+including after resolving symlinks. External or absolute URLs, escaping paths,
+explicit HTML `<base>` tags, conditional or alternate stylesheets, and HTML
+without explicit stylesheet links stop detection. There is no fallback that
+patches every CSS file. This implementation does not traverse JavaScript
+imports or locate dynamically loaded stylesheets.
 
 Injected styles are wrapped with markers similar to:
 
@@ -340,11 +357,16 @@ The current implementation expects the OpenAI Codex VS Code extension to expose:
 openai.chatgpt
 ```
 
-### WebView CSS assets
+### WebView stylesheet references
 
-```text
-app-initial-*.css
+```html
+<!-- webview/index.html -->
+<link rel="stylesheet" href="./assets/example.css">
 ```
+
+Both legacy `app-initial-*.css` names and hash-only CSS names are supported.
+Read-only detection was checked against installed versions `26.1007.21434` and
+`26.1111.21308`. This confirms file discovery, not rendering in a live WebView.
 
 ### User message attribute
 
@@ -373,7 +395,9 @@ It:
 - does **not** disable Content Security Policy
 - does **not** inject JavaScript into the Codex WebView
 
-The extension only reads and updates the Codex WebView CSS assets required to apply the configured visual customization.
+The extension reads the Codex WebView entry HTML to discover its stylesheet
+references and updates only the referenced CSS assets to apply the configured
+visual customization.
 
 In VS Code Restricted Mode, workspace-defined Codex UI Customizer settings are
 disabled. Settings are also validated before being written to CSS so a workspace
@@ -406,7 +430,7 @@ Codex UI Customizer is based on Codex implementation details rather than a stabl
 As a result:
 
 - Codex updates may break individual customizations
-- WebView assets may be renamed
+- changes to the HTML entry point or stylesheet loading mechanism may require compatibility updates
 - DOM selectors may change
 - an already-open WebView may require reload after styling
 - Codex extension updates may overwrite previous CSS modifications before this extension reapplies them
@@ -426,13 +450,13 @@ npm run package
 This produces a file similar to:
 
 ```text
-codex-ui-customizer-0.2.0.vsix
+codex-ui-customizer-0.2.2.vsix
 ```
 
 Install or update it with:
 
 ```bash
-code --install-extension codex-ui-customizer-0.2.0.vsix --force
+code --install-extension codex-ui-customizer-0.2.2.vsix --force
 ```
 
 For Remote-SSH, install the VSIX on the remote extension host where Codex is running.
@@ -452,7 +476,9 @@ detect openai.chatgpt
         ↓
 resolve extensionPath
         ↓
-find webview/assets/app-initial-*.css
+read webview/index.html stylesheet links
+        ↓
+validate referenced local CSS files
         ↓
 backup
         ↓

@@ -4,6 +4,7 @@ const vscode = require("vscode");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { DEFAULTS, sanitizeStyleConfig } = require("./style");
+const { discoverCssTargets } = require("./css-targets");
 
 const CODEX_EXTENSION_ID = "openai.chatgpt";
 const START_MARKER = "/* codex-ui-customizer:start */";
@@ -134,18 +135,9 @@ async function getCodexCssFiles() {
   }
 
   const assetsDir = path.join(codex.extensionPath, "webview", "assets");
-  const entries = await fs.readdir(assetsDir);
-
-  const cssFiles = entries
-    .filter((name) => /^app-initial-.*\.css$/i.test(name))
-    .map((name) => path.join(assetsDir, name))
-    .sort();
-
-  if (cssFiles.length === 0) {
-    throw new Error(`No app-initial-*.css files found under ${assetsDir}`);
-  }
-
-  return { codex, assetsDir, cssFiles };
+  const detected = await discoverCssTargets(codex.extensionPath);
+  log(`Detected Codex ${codex.packageJSON?.version ?? "unknown"}: ${detected.cssFiles.length} stylesheet(s) linked by ${detected.htmlFile}`);
+  return { codex, assetsDir, ...detected };
 }
 
 async function applyPatch({ notify = true, quietMissing = false } = {}) {
@@ -228,11 +220,14 @@ async function showTarget() {
   channel.clear();
   channel.appendLine(`Extension host: ${host}`);
   channel.appendLine(`Codex extension: ${target.codex.id}`);
+  channel.appendLine(`Codex version: ${target.codex.packageJSON?.version ?? "unknown"}`);
   channel.appendLine(`Codex path: ${target.codex.extensionPath}`);
   channel.appendLine(`Assets path: ${target.assetsDir}`);
+  channel.appendLine(`Reference HTML: ${target.htmlFile}`);
+  channel.appendLine('Detection: explicit <link rel="stylesheet"> references (HTML order)');
   channel.appendLine("CSS targets:");
-  for (const file of target.cssFiles) {
-    channel.appendLine(`- ${file}`);
+  for (const { file, href } of target.targets) {
+    channel.appendLine(`- ${href} -> ${file}`);
   }
   channel.show(true);
 }
@@ -277,6 +272,8 @@ function activate(context) {
       try {
         await showTarget();
       } catch (error) {
+        log(`Target detection failed: ${String(error)}`);
+        getOutput().show(true);
         void vscode.window.showErrorMessage(`Codex UI Customizer: ${String(error)}`);
       }
     }),
