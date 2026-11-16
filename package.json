@@ -1,8 +1,8 @@
 {
   "name": "codex-ui-customizer",
   "displayName": "Codex UI Customizer (Unofficial)",
-  "description": "Customize the OpenAI Codex VS Code UI, including user message styling and Remote-SSH sessions.",
-  "version": "0.2.2",
+  "description": "Customize Codex message styling and safely manage standard file-link opening, including Remote-SSH sessions.",
+  "version": "0.3.0",
   "publisher": "mm-lab",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
@@ -28,6 +28,8 @@
       "description": "Workspace-defined UI customization values are disabled in Restricted Mode.",
       "restrictedConfigurations": [
         "codexUiCustomizer.autoApply",
+        "codexUiCustomizer.fileLinks.enabled",
+        "codexUiCustomizer.fileLinks.excludedExtensions",
         "codexUiCustomizer.userMessage.background",
         "codexUiCustomizer.userMessage.borderColor",
         "codexUiCustomizer.userMessage.borderWidth",
@@ -40,7 +42,8 @@
     "onStartupFinished",
     "onCommand:codexUiCustomizer.apply",
     "onCommand:codexUiCustomizer.remove",
-    "onCommand:codexUiCustomizer.showTarget"
+    "onCommand:codexUiCustomizer.showTarget",
+    "onCommand:codexUiCustomizer.reportFileLinkError"
   ],
   "contributes": {
     "commands": [
@@ -54,16 +57,30 @@
       },
       {
         "command": "codexUiCustomizer.showTarget",
-        "title": "Codex UI Customizer: Show Target"
+        "title": "Codex UI Customizer: Show Target and Status"
       }
     ],
     "configuration": {
       "title": "Codex UI Customizer",
       "properties": {
+        "codexUiCustomizer.fileLinks.excludedExtensions": {
+          "type": "array",
+          "default": [],
+          "scope": "machine",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^\\.?[^.\\\\/\\s]+$" },
+          "description": "Extensions to open with Codex's original text handler, such as md or .txt. Case-insensitive; the leading dot is optional. Uses the final filename extension. Changes affect subsequent clicks without reloading once file-link customization is installed."
+        },
+        "codexUiCustomizer.fileLinks.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Select standard file-link handling for Apply: use VS Code's default editor and reveal the file in Explorer when no line/column is specified. Apply restores the managed original when disabled. Remove restores all managed customizations without changing this setting."
+        },
         "codexUiCustomizer.autoApply": {
           "type": "boolean",
           "default": true,
-          "description": "Apply UI customizations automatically when the extension activates."
+          "description": "Apply CSS and selected file-link customization on startup and configuration/extension changes. Remove suspends automatic application until Apply is run, without changing settings."
         },
         "codexUiCustomizer.userMessage.background": {
           "type": "string",
@@ -97,7 +114,7 @@
     }
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/*.test.js",
     "package": "vsce package",
     "publish": "vsce publish"
   },
@@ -120,5 +137,8 @@
   "pricing": "Free",
   "devDependencies": {
     "@vscode/vsce": "4.1.1"
+  },
+  "dependencies": {
+    "acorn": "8.15.0"
   }
 }

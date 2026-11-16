@@ -1,0 +1,14 @@
+/* codex-ui-customizer:file-links:v2 */if(r==null&&n==null){
+    try {
+      if ((await oo.workspace.fs.stat(v)).type & oo.FileType.Directory) return false;
+      await oo.commands.executeCommand("vscode.open",v,{preview:false});
+      await oo.commands.executeCommand("revealInExplorer",v);
+      return true;
+    } catch (codexUiLinkError) {
+      if (codexUiLinkError?.code === "FileNotFound" || codexUiLinkError?.code === "ENOENT") return false;
+      try {
+        await oo.commands.executeCommand("codexUiCustomizer.reportFileLinkError", "" + codexUiLinkError);
+      } catch {}
+      return false;
+    }
+  }

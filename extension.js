@@ -5,6 +5,8 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { DEFAULTS, sanitizeStyleConfig } = require("./style");
 const { discoverCssTargets } = require("./css-targets");
+const { installFileLinks } = require("./file-link-controller");
+const { installCustomizations } = require("./customization-controller");
 
 const CODEX_EXTENSION_ID = "openai.chatgpt";
 const START_MARKER = "/* codex-ui-customizer:start */";
@@ -13,7 +15,7 @@ const BACKUP_SUFFIX = ".codex-ui-customizer.bak";
 const OUTPUT_NAME = "Codex UI Customizer";
 
 let output;
-let applyTimer;
+let customizations;
 
 function getOutput() {
   if (!output) {
@@ -101,7 +103,7 @@ async function restoreBackupIfPresent(file) {
     if (withoutPatch.trimEnd() === backupContent.trimEnd()) {
       await atomicWrite(file, backupContent);
       log(`Restored backup: ${file}`);
-      await fs.unlink(backup);
+      await fs.unlink(backup).catch(error => { error.changed = true; throw error; });
       return true;
     }
 
@@ -109,7 +111,7 @@ async function restoreBackupIfPresent(file) {
       const cleaned = withoutPatch.trimEnd() + "\n";
       await atomicWrite(file, cleaned);
       log(`Preserved newer CSS changes while removing customization: ${file}`);
-      await fs.unlink(backup);
+      await fs.unlink(backup).catch(error => { error.changed = true; throw error; });
       return true;
     }
 
@@ -140,32 +142,27 @@ async function getCodexCssFiles() {
   return { codex, assetsDir, ...detected };
 }
 
-async function applyPatch({ notify = true, quietMissing = false } = {}) {
-  let target;
-
-  try {
-    target = await getCodexCssFiles();
-  } catch (error) {
-    if (quietMissing) {
-      log(`Auto-apply skipped: ${String(error)}`);
-      return;
-    }
-    throw error;
-  }
+async function applyPatch() {
+  const target = await getCodexCssFiles();
 
   const style = getStyleBlock();
   let changed = 0;
 
   for (const file of target.cssFiles) {
-    const original = await fs.readFile(file, "utf8");
-    const withoutPatch = stripExistingPatch(original).trimEnd();
-    const patched = `${withoutPatch}\n\n${style}\n`;
+    try {
+      const original = await fs.readFile(file, "utf8");
+      const withoutPatch = stripExistingPatch(original).trimEnd();
+      const patched = `${withoutPatch}\n\n${style}\n`;
 
-    if (patched !== original) {
-      await ensureBackup(file, original);
-      await atomicWrite(file, patched);
-      changed++;
-      log(`Patched: ${file}`);
+      if (patched !== original) {
+        await ensureBackup(file, original);
+        await atomicWrite(file, patched);
+        changed++;
+        log(`Patched: ${file}`);
+      }
+    } catch (error) {
+      error.changed = changed > 0;
+      throw error;
     }
   }
 
@@ -174,13 +171,7 @@ async function applyPatch({ notify = true, quietMissing = false } = {}) {
     `Apply complete on ${host}: ${changed}/${target.cssFiles.length} file(s) changed.`
   );
 
-  if (notify) {
-    void vscode.window.showInformationMessage(
-      changed > 0
-        ? `Codex UI Customizer: applied on ${host}. Reopen the Codex view if needed.`
-        : `Codex UI Customizer: style is already current on ${host}.`
-    );
-  }
+  return { state: "applied", changed: changed > 0, reason: `${changed}/${target.cssFiles.length} CSS file(s) changed.` };
 }
 
 async function removePatch() {
@@ -189,27 +180,29 @@ async function removePatch() {
   let restored = 0;
 
   for (const file of target.cssFiles) {
-    if (await restoreBackupIfPresent(file)) {
-      changed++;
-      restored++;
-      continue;
-    }
+    try {
+      if (await restoreBackupIfPresent(file)) {
+        changed++;
+        restored++;
+        continue;
+      }
 
-    const original = await fs.readFile(file, "utf8");
-    const cleaned = stripExistingPatch(original).trimEnd() + "\n";
+      const original = await fs.readFile(file, "utf8");
+      const cleaned = stripExistingPatch(original).trimEnd() + "\n";
 
-    if (cleaned !== original) {
-      await atomicWrite(file, cleaned);
-      changed++;
-      log(`Removed patch markers: ${file}`);
+      if (cleaned !== original) {
+        await atomicWrite(file, cleaned);
+        changed++;
+        log(`Removed patch markers: ${file}`);
+      }
+    } catch (error) {
+      error.changed = error.changed === true || changed > 0;
+      throw error;
     }
   }
 
-  void vscode.window.showInformationMessage(
-    `Codex UI Customizer: removed from ${changed} CSS file(s)` +
-      (restored > 0 ? `, restored ${restored} backup(s)` : "") +
-      ". Reopen the Codex view if needed."
-  );
+  log(`CSS removed from ${changed} file(s); restored ${restored} backup(s).`);
+  return { state: "unapplied", changed: changed > 0, reason: `${changed} CSS file(s) cleaned; ${restored} backup(s) restored.` };
 }
 
 async function showTarget() {
@@ -217,7 +210,6 @@ async function showTarget() {
   const host = vscode.env.remoteName ?? "local";
   const channel = getOutput();
 
-  channel.clear();
   channel.appendLine(`Extension host: ${host}`);
   channel.appendLine(`Codex extension: ${target.codex.id}`);
   channel.appendLine(`Codex version: ${target.codex.packageJSON?.version ?? "unknown"}`);
@@ -229,74 +221,29 @@ async function showTarget() {
   for (const { file, href } of target.targets) {
     channel.appendLine(`- ${href} -> ${file}`);
   }
-  channel.show(true);
-}
-
-function scheduleAutoApply() {
-  if (!getConfig().autoApply) return;
-
-  if (applyTimer) {
-    clearTimeout(applyTimer);
+  let patched = 0, current = 0;
+  for (const file of target.cssFiles) {
+    const content = await fs.readFile(file, "utf8");
+    if (content.includes(START_MARKER)) patched++;
+    if (content === `${stripExistingPatch(content).trimEnd()}\n\n${getStyleBlock()}\n`) current++;
   }
-
-  applyTimer = setTimeout(() => {
-    applyPatch({ notify: false, quietMissing: true }).catch((error) => {
-      log(`Auto-apply failed: ${String(error)}`);
-    });
-  }, 1200);
+  const state = current === target.cssFiles.length ? "applied" : patched === 0 ? "unapplied" : "outdated";
+  const reason = `${current}/${target.cssFiles.length} CSS files match current settings; ${patched} contain customization markers.`;
+  channel.appendLine(`CSS: ${state}; ${reason}`);
+  return { state, reason };
 }
 
 function activate(context) {
   log(`Activated on extension host: ${vscode.env.remoteName ?? "local"}`);
-
-  context.subscriptions.push(
-    getOutput(),
-
-    vscode.commands.registerCommand("codexUiCustomizer.apply", async () => {
-      try {
-        await applyPatch({ notify: true });
-      } catch (error) {
-        void vscode.window.showErrorMessage(`Codex UI Customizer: ${String(error)}`);
-      }
-    }),
-
-    vscode.commands.registerCommand("codexUiCustomizer.remove", async () => {
-      try {
-        await removePatch();
-      } catch (error) {
-        void vscode.window.showErrorMessage(`Codex UI Customizer: ${String(error)}`);
-      }
-    }),
-
-    vscode.commands.registerCommand("codexUiCustomizer.showTarget", async () => {
-      try {
-        await showTarget();
-      } catch (error) {
-        log(`Target detection failed: ${String(error)}`);
-        getOutput().show(true);
-        void vscode.window.showErrorMessage(`Codex UI Customizer: ${String(error)}`);
-      }
-    }),
-
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("codexUiCustomizer")) {
-        scheduleAutoApply();
-      }
-    }),
-
-    vscode.extensions.onDidChange(() => {
-      // Re-apply after Codex install/update because its asset filenames may change.
-      scheduleAutoApply();
-    })
-  );
-
-  scheduleAutoApply();
+  const fileLinks = installFileLinks(vscode, context, { log, getOutput });
+  context.subscriptions.push(getOutput());
+  customizations = installCustomizations(vscode, context, {
+    fileLinks, applyCss: applyPatch, removeCss: removePatch, inspectCss: showTarget, log, getOutput,
+  });
 }
 
 function deactivate() {
-  if (applyTimer) {
-    clearTimeout(applyTimer);
-  }
+  customizations?.dispose();
 }
 
 module.exports = { activate, deactivate };

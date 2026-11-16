@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const vm = require("node:vm");
+const { loadExtension } = require("./helpers/extension-host");
 const { discoverCssTargets, getStylesheetReferences } = require("../css-targets");
 
 async function fixture(t, html, files = {}) {
@@ -95,38 +95,13 @@ test("rejects unsupported base or conditional links rather than guessing", () =>
   ]) assert.throws(() => getStylesheetReferences(html));
 });
 
-async function loadExtension(root) {
-  const commands = new Map();
-  const lines = [], errors = [];
-  const channel = { appendLine: s => lines.push(s), clear: () => { lines.length = 0; }, show() {} };
-  const vscode = {
-    window: { createOutputChannel: () => channel, showInformationMessage() {}, showErrorMessage: s => errors.push(s) },
-    env: {},
-    workspace: {
-      getConfiguration: () => ({ get: (key, fallback) => key === "autoApply" ? false : fallback }),
-      onDidChangeConfiguration() {},
-    },
-    extensions: {
-      getExtension: () => ({ id: "openai.chatgpt", extensionPath: root, packageJSON: { version: "fixture" } }),
-      onDidChange() {},
-    },
-    commands: { registerCommand: (name, fn) => { commands.set(name, fn); } },
-  };
-  const sandbox = {
-    require: name => name === "vscode" ? vscode : name.startsWith("./") ? require(`../${name.slice(2)}`) : require(name),
-    module: { exports: {} }, setTimeout, clearTimeout,
-  };
-  vm.runInNewContext(await fs.readFile(path.join(__dirname, "..", "extension.js"), "utf8"), sandbox);
-  sandbox.module.exports.activate({ subscriptions: [] });
-  return { commands, lines, errors };
-}
-
 test("Apply, repeat Apply, diagnostics, and Remove work on referenced CSS only", async (t) => {
   const original = "body { color: red; }\n";
   const root = await fixture(t, '<link rel="stylesheet" href="./assets/hash.css">', {
     "hash.css": original, "unused.css": "/* unused */",
   });
-  const { commands, lines, errors } = await loadExtension(root);
+  const { commands, lines, errors, dispose } = await loadExtension(root);
+  t.after(dispose);
   const css = path.join(root, "webview", "assets", "hash.css");
   const backup = `${css}.codex-ui-customizer.bak`;
   await commands.get("codexUiCustomizer.apply")();
@@ -149,11 +124,40 @@ test("validates all references before Apply writes, and reports failed detection
   const root = await fixture(t, '<link rel="stylesheet" href="./assets/good.css"><link rel="stylesheet" href="./assets/missing.css">', {
     "good.css": "body {}",
   });
-  const { commands, lines, errors } = await loadExtension(root);
+  const { commands, lines, errors, dispose } = await loadExtension(root);
+  t.after(dispose);
   await commands.get("codexUiCustomizer.apply")();
   assert.equal(await fs.readFile(path.join(root, "webview", "assets", "good.css"), "utf8"), "body {}");
   assert.deepEqual(await fs.readdir(path.join(root, "webview", "assets")), ["good.css"]);
   await commands.get("codexUiCustomizer.showTarget")();
-  assert.equal(errors.length, 2);
-  assert.ok(lines.some(s => s.includes("Target detection failed:")));
+  assert.equal(errors.length, 1);
+  assert.ok(lines.some(s => s.includes("CSS target detection failed:")));
+});
+
+test("file-link and CSS management coexist through the real extension activation", async t => {
+  const originalCss = "body { color: red; }\n";
+  const root = await fixture(t, '<link rel="stylesheet" href="./assets/main.css">', { "main.css": originalCss });
+  const source = await require("./helpers/file-links").sourcePromise;
+  await fs.mkdir(path.join(root, "out"));
+  const main = path.join(root, "out", "extension.js");
+  await fs.writeFile(main, source);
+  const h = await loadExtension(root, true);
+  t.after(h.dispose);
+  const applied = await h.commands.get("codexUiCustomizer.apply")();
+  assert.equal(applied.fileLinks.state, "reload-pending");
+  const patchedJs = await fs.readFile(main, "utf8");
+  await h.commands.get("codexUiCustomizer.apply")();
+  const css = path.join(root, "webview", "assets", "main.css");
+  const patchedCss = await fs.readFile(css, "utf8");
+  assert.notEqual(patchedCss, originalCss);
+  assert.equal(await fs.readFile(main, "utf8"), patchedJs);
+  const removed = await h.commands.get("codexUiCustomizer.remove")();
+  assert.equal(removed.suspended, true);
+  assert.equal(await fs.readFile(main, "utf8"), source);
+  assert.equal(await fs.readFile(css, "utf8"), originalCss);
+  assert.equal(h.settings["fileLinks.enabled"], true);
+  assert.deepEqual(h.settingWrites, []);
+  await h.commands.get("codexUiCustomizer.remove")();
+  assert.equal(await fs.readFile(css, "utf8"), originalCss);
+  assert.deepEqual(h.errors, []);
 });

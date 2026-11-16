@@ -9,7 +9,7 @@ When reporting a problem, please include:
 - VS Code version
 - OpenAI Codex extension version
 - Local or Remote-SSH environment
-- Output from `Codex UI Customizer: Show Target`
+- Output from `Codex UI Customizer: Show Target and Status` (including whether Remove has suspended automatic application)
 - Whether manual `Codex UI Customizer: Apply` succeeds
 
 Do not include conversation contents, credentials, tokens, or other sensitive information.

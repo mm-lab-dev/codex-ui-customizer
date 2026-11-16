@@ -6,3 +6,7 @@
 PUBLISHING.md
 resources/large-icon.png
 test/**
+.cache/**
+.tmp/**
+VALIDATION.md
+scripts/**

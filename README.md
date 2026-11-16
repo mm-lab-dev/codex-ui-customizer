@@ -4,14 +4,14 @@ Customize the **OpenAI Codex UI in VS Code**.
 
 Codex UI Customizer is a small, unofficial VS Code extension that applies visual customizations to the Codex chat interface. It supports both local VS Code sessions and **Remote-SSH** environments where the Codex extension runs on a remote extension host.
 
-The first available customization is styling for **user message bubbles**. The extension is intentionally structured so additional UI customization options can be added in future releases.
+The extension styles **user message bubbles** and optionally manages a reversible patch for **standard file-link opening**, without an extension allowlist.
 
 > [!IMPORTANT]
 > **Unofficial extension**
 >
 > Codex UI Customizer is not affiliated with, endorsed by, or maintained by OpenAI.
 >
-> This extension modifies internal CSS assets of the installed `openai.chatgpt` VS Code extension. It does not use an official Codex theming API, and future Codex updates may require compatibility fixes.
+> This extension modifies internal CSS assets of the installed `openai.chatgpt` VS Code extension. Enabling standard file links also modifies its JavaScript entry point. These are local workarounds using internal implementation details; future Codex updates require continued compatibility review.
 
 ---
 
@@ -32,6 +32,11 @@ The first available customization is styling for **user message bubbles**. The e
 - Restores the original CSS with the `Remove` command
 - Automatically reapplies customizations after Codex extension updates when possible
 - Provides commands for Apply, Remove, and target diagnostics
+- Optionally opens coordinate-free file links with VS Code's default editor and selects the file in Explorer
+- Preserves the original text handler for links with line or column coordinates
+- Detects the previous manual MP4 patch and migrates only with its verified pristine original
+- Keeps versioned, hash-checked JavaScript backups and refuses unsafe restoration
+- Reports file-link status and failures without automatically reloading the window
 - Does **not** disable WebView CSP
 - Does **not** inject scripts into the Codex WebView
 
@@ -66,6 +71,8 @@ Default configuration:
 ```json
 {
   "codexUiCustomizer.autoApply": true,
+  "codexUiCustomizer.fileLinks.enabled": false,
+  "codexUiCustomizer.fileLinks.excludedExtensions": [],
   "codexUiCustomizer.userMessage.background": "#173e76",
   "codexUiCustomizer.userMessage.borderColor": "#3d4654",
   "codexUiCustomizer.userMessage.borderWidth": "1px",
@@ -77,7 +84,9 @@ Default configuration:
 
 | Setting | Default | Description |
 |---|---|---|
-| `codexUiCustomizer.autoApply` | `true` | Automatically applies UI customizations when the extension activates |
+| `codexUiCustomizer.autoApply` | `true` | Automatically reconciles CSS and selected file-link handling at startup and on configuration/extension changes, unless suspended by Remove |
+| `codexUiCustomizer.fileLinks.enabled` | `false` | Selects file-link handling for Apply; when false, Apply restores its verified managed original |
+| `codexUiCustomizer.fileLinks.excludedExtensions` | `[]` | Extensions to keep in the original text handler, e.g. `md` or `.txt`; case-insensitive |
 | `codexUiCustomizer.userMessage.background` | `#173e76` | Background color of user message bubbles |
 | `codexUiCustomizer.userMessage.borderColor` | `#3d4654` | Border color of user message bubbles |
 | `codexUiCustomizer.userMessage.borderWidth` | `1px` | Border width of user message bubbles |
@@ -110,7 +119,10 @@ Available commands:
 
 ### Codex UI Customizer: Apply
 
-Applies the current customization settings to the detected Codex CSS assets.
+Applies CSS and reconciles file-link handling according to Settings. If
+`fileLinks.enabled` is false, the managed file-link patch is restored instead.
+Apply also resumes automatic management after Remove, and works when `autoApply`
+is false. Settings values are preserved.
 
 ```text
 Codex UI Customizer: Apply
@@ -118,13 +130,16 @@ Codex UI Customizer: Apply
 
 ### Codex UI Customizer: Remove
 
-Removes the injected customization and restores the original CSS backup when available.
+Removes both CSS and managed file-link customizations, using verified originals
+where available. Settings values are preserved. Remove persists a suspension of
+automatic application across restarts and updates. Run Apply to resume. Check
+Show Target and Status if either restoration fails.
 
 ```text
 Codex UI Customizer: Remove
 ```
 
-### Codex UI Customizer: Show Target
+### Codex UI Customizer: Show Target and Status
 
 Displays diagnostic information in the Output panel, including:
 
@@ -134,14 +149,52 @@ Displays diagnostic information in the Output panel, including:
 - Codex WebView assets path
 - reference HTML and detection method
 - CSS files being patched and their original `href` references, in HTML order
+- CSS application state and whether it matches current settings
+- file-link state, entry point, hash, backup path and explanation
+- automatic-application setting and persistent suspension by Remove
 
 If detection fails, the command opens the Output panel with the failure reason.
 
 ```text
-Codex UI Customizer: Show Target
+Codex UI Customizer: Show Target and Status
 ```
 
 This command is especially useful when troubleshooting Remote-SSH environments.
+
+---
+
+## Standard File Links (Opt-in)
+
+Select file-link handling in Settings, then run **Codex UI Customizer: Apply**:
+
+```json
+{
+  "codexUiCustomizer.fileLinks.enabled": true,
+  "codexUiCustomizer.fileLinks.excludedExtensions": ["md", ".txt"]
+}
+```
+
+Links without line/column coordinates open in VS Code's default editor and select
+the file in Explorer. Supported viewers and media formats depend on your VS Code
+installation.
+
+Excluded extensions use Codex's original text handler, as do links with line or
+column coordinates. Matching ignores case and accepts extensions with or without
+a leading dot. The last filename extension is used, so `gz` matches `archive.tar.gz`.
+The default exclusion list is empty.
+
+Once the updated handler is loaded, changes to the exclusion list affect the next
+click without applying or reloading again. After initially applying or restoring
+the handler, save your work and use the offered **Reload Window** button.
+
+Use **Remove** to undo both CSS and file-link customization. It preserves Settings
+and keeps automatic application suspended until **Apply**, including after restart.
+
+If application or restoration fails, run **Show Target and Status** for the reason.
+File-link originals are backed up under `~/.codex/codex-ui-customizer/file-links/`
+and checked before restoration. This feature modifies Codex internals, so Codex
+updates may require compatibility fixes. Technical checks and recovery details
+are recorded in [VALIDATION.md](VALIDATION.md) in the source repository.
 
 ---
 
@@ -277,6 +330,8 @@ This avoids intentionally replacing unrelated Codex CSS rules.
 > [!WARNING]
 > Run **`Codex UI Customizer: Remove` before uninstalling this extension**.
 
+Verify both CSS and file-link restoration succeeded, and reload before uninstalling.
+
 Recommended uninstall sequence:
 
 ```text
@@ -287,7 +342,7 @@ Ctrl + Shift + P
 
 VS Code does not provide a reliable extension uninstall hook that can safely modify another installed extension's files during the uninstall operation.
 
-Because of this, uninstalling Codex UI Customizer without first running `Remove` may leave the injected CSS in the installed Codex extension.
+Because of this, uninstalling Codex UI Customizer without first running `Remove` may leave CSS or JavaScript customizations in the installed Codex extension.
 
 ### If You Already Uninstalled Without Running Remove
 
@@ -326,7 +381,9 @@ A full VS Code restart is normally not required.
 
 The OpenAI Codex extension may update its internal WebView files at any time.
 
-Codex UI Customizer listens for extension changes and attempts to reapply the current customization automatically.
+Codex UI Customizer listens for extension changes and attempts to reconcile both
+features automatically when `autoApply` is enabled and Remove has not suspended
+application. While suspended, updates only trigger read-only status checks.
 
 You can also run:
 
@@ -391,13 +448,13 @@ It:
 - does **not** access OpenAI account credentials
 - does **not** access API keys
 - does **not** inspect prompts or responses
-- does **not** modify Codex JavaScript
 - does **not** disable Content Security Policy
 - does **not** inject JavaScript into the Codex WebView
 
 The extension reads the Codex WebView entry HTML to discover its stylesheet
-references and updates only the referenced CSS assets to apply the configured
-visual customization.
+references and updates those CSS assets for visual customization. The separate,
+opt-in standard file-link feature reads and patches Codex's JavaScript entry
+point using a verified structural adapter. It adds no scripts to the WebView.
 
 In VS Code Restricted Mode, workspace-defined Codex UI Customizer settings are
 disabled. Settings are also validated before being written to CSS so a workspace
@@ -450,16 +507,33 @@ npm run package
 This produces a file similar to:
 
 ```text
-codex-ui-customizer-0.2.2.vsix
+codex-ui-customizer-0.3.0.vsix
 ```
 
 Install or update it with:
 
 ```bash
-code --install-extension codex-ui-customizer-0.2.2.vsix --force
+code --install-extension codex-ui-customizer-0.3.0.vsix --force
 ```
 
 For Remote-SSH, install the VSIX on the remote extension host where Codex is running.
+
+In the connected Remote-SSH window, use **Extensions: Install from VSIX...** and
+select the generated package; ensure the extension is installed under **SSH: your
+host** alongside Codex. Reload manually to load the new customizer, set
+`codexUiCustomizer.fileLinks.enabled` in Settings and run **Apply**, then save work
+and click **Reload Window** when offered. Inspect **Show Target and Status**.
+Check an image/video link and a code link with
+line coordinates. Recheck status after restarting; it should be applied with no
+repeat reload notice. The legacy MP4 evidence must be available on that same host.
+
+To update an existing 0.3.0 installation, use `--force` and reload each affected
+VS Code window. If applying the updated file-link handler offers another reload,
+save your work and use the notification button.
+
+See [VALIDATION.md](VALIDATION.md) in the source repository for automated evidence,
+simulated-update results and outstanding live checks. Building a VSIX alone does
+not verify installation, live playback, or a real Codex update.
 
 ---
 
@@ -521,7 +595,7 @@ When reporting a problem, please include:
 - output from:
 
   ```text
-  Codex UI Customizer: Show Target
+  Codex UI Customizer: Show Target and Status
   ```
 
 Do **not** include:
