@@ -11,7 +11,7 @@ The extension styles **user message bubbles** and optionally manages a reversibl
 >
 > Codex UI Customizer is not affiliated with, endorsed by, or maintained by OpenAI.
 >
-> This extension modifies internal CSS assets of the installed `openai.chatgpt` VS Code extension. Enabling standard file links also modifies its JavaScript entry point. These are local workarounds using internal implementation details; future Codex updates require continued compatibility review.
+> This extension modifies internal CSS assets of the installed `openai.chatgpt` VS Code extension. Enabling standard file links also modifies its JavaScript entry point. Enabling plain-text paste appends a handler to its existing WebView module. These are local workarounds using internal implementation details; future Codex updates require continued compatibility review.
 
 ---
 
@@ -37,8 +37,9 @@ The extension styles **user message bubbles** and optionally manages a reversibl
 - Detects the previous manual MP4 patch and migrates only with its verified pristine original
 - Keeps versioned, hash-checked JavaScript backups and refuses unsafe restoration
 - Reports file-link status and failures without automatically reloading the window
+- Optionally pastes plain text into the Codex composer with **Ctrl+Shift+V**, while preserving ordinary Ctrl+V
 - Does **not** disable WebView CSP
-- Does **not** inject scripts into the Codex WebView
+- Plain-text paste uses the existing WebView module without adding script tags
 
 ---
 
@@ -73,6 +74,7 @@ Default configuration:
   "codexUiCustomizer.autoApply": true,
   "codexUiCustomizer.fileLinks.enabled": false,
   "codexUiCustomizer.fileLinks.excludedExtensions": [],
+  "codexUiCustomizer.plainTextPaste.enabled": true,
   "codexUiCustomizer.userMessage.background": "#173e76",
   "codexUiCustomizer.userMessage.borderColor": "#3d4654",
   "codexUiCustomizer.userMessage.borderWidth": "1px",
@@ -84,9 +86,10 @@ Default configuration:
 
 | Setting | Default | Description |
 |---|---|---|
-| `codexUiCustomizer.autoApply` | `true` | Automatically reconciles CSS and selected file-link handling at startup and on configuration/extension changes, unless suspended by Remove |
+| `codexUiCustomizer.autoApply` | `true` | Automatically reconciles CSS, selected file-link handling and plain-text paste at startup and on configuration/extension changes, unless suspended by Remove |
 | `codexUiCustomizer.fileLinks.enabled` | `false` | Selects file-link handling for Apply; when false, Apply restores its verified managed original |
 | `codexUiCustomizer.fileLinks.excludedExtensions` | `[]` | Extensions to keep in the original text handler, e.g. `md` or `.txt`; case-insensitive |
+| `codexUiCustomizer.plainTextPaste.enabled` | `true` | Enables Ctrl+Shift+V to paste clipboard text directly into the Codex composer; Apply and reload to activate |
 | `codexUiCustomizer.userMessage.background` | `#173e76` | Background color of user message bubbles |
 | `codexUiCustomizer.userMessage.borderColor` | `#3d4654` | Border color of user message bubbles |
 | `codexUiCustomizer.userMessage.borderWidth` | `1px` | Border width of user message bubbles |
@@ -95,6 +98,29 @@ Default configuration:
 Colors accept 3, 4, 6, or 8 digit hexadecimal values. Border width and corner
 radius accept `0` or non-negative values using `px`, `rem`, or `em`. Invalid
 values are ignored and replaced with the corresponding default.
+
+### Plain-text paste (Windows/Linux)
+
+1. Plain-text paste is enabled by default. If previously disabled, set `codexUiCustomizer.plainTextPaste.enabled` to `true`.
+2. Run **Codex UI Customizer: Apply**, then use **Reload Window**.
+3. Focus the Codex input and press **Ctrl+Shift+V**.
+
+Only `text/plain` is inserted, including Japanese text, newlines and literal
+Markdown characters. HTML formatting, clipboard images and file attachments are
+excluded from this shortcut; an image-only clipboard does nothing. Ordinary
+**Ctrl+V** keeps Codex's existing behavior. The text replaces the current selection
+through the browser's native text editing and participates in undo. Clipboard content stays
+in the WebView, including over Remote-SSH.
+
+This uses Codex's internal ProseMirror editor and `[data-composer-input]` layout.
+The shortcut reads text through the WebView clipboard API and handles the key
+before VS Code forwards it to the host. If clipboard access is unavailable, it
+attempts a sanitized native paste. Unsupported editors retain their native paste
+behavior. Custom keybindings that intercept the key before it reaches the WebView
+must be resolved separately.
+The WebView module has a verified original backup; unexpected edits stop restoration
+instead of overwriting other changes. Disable the setting and run Apply, or run
+**Remove**, then reload to restore the original module.
 
 The `codexUiCustomizer.*` namespace is intentionally generic so future releases can add additional categories such as:
 
@@ -119,7 +145,7 @@ Available commands:
 
 ### Codex UI Customizer: Apply
 
-Applies CSS and reconciles file-link handling according to Settings. If
+Applies CSS and reconciles file-link handling and plain-text paste according to Settings. If
 `fileLinks.enabled` is false, the managed file-link patch is restored instead.
 Apply also resumes automatic management after Remove, and works when `autoApply`
 is false. Settings values are preserved.
@@ -130,7 +156,7 @@ Codex UI Customizer: Apply
 
 ### Codex UI Customizer: Remove
 
-Removes both CSS and managed file-link customizations, using verified originals
+Removes CSS, managed file-link customizations and plain-text paste, using verified originals
 where available. Settings values are preserved. Remove persists a suspension of
 automatic application across restarts and updates. Run Apply to resume. Check
 Show Target and Status if either restoration fails.
@@ -187,7 +213,7 @@ Once the updated handler is loaded, changes to the exclusion list affect the nex
 click without applying or reloading again. After initially applying or restoring
 the handler, save your work and use the offered **Reload Window** button.
 
-Use **Remove** to undo both CSS and file-link customization. It preserves Settings
+Use **Remove** to undo CSS, file-link and plain-text paste customization. It preserves Settings
 and keeps automatic application suspended until **Apply**, including after restart.
 
 If application or restoration fails, run **Show Target and Status** for the reason.
@@ -449,12 +475,14 @@ It:
 - does **not** access API keys
 - does **not** inspect prompts or responses
 - does **not** disable Content Security Policy
-- does **not** inject JavaScript into the Codex WebView
+- does **not** add script tags or weaken WebView CSP
 
 The extension reads the Codex WebView entry HTML to discover its stylesheet
 references and updates those CSS assets for visual customization. The separate,
 opt-in standard file-link feature reads and patches Codex's JavaScript entry
-point using a verified structural adapter. It adds no scripts to the WebView.
+point using a verified structural adapter. The optional plain-text paste feature
+appends a handler to the existing WebView module. It reads clipboard text only
+during Ctrl+Shift+V and inserts it locally, without sending it to the extension host.
 
 In VS Code Restricted Mode, workspace-defined Codex UI Customizer settings are
 disabled. Settings are also validated before being written to CSS so a workspace

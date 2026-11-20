@@ -2,7 +2,7 @@
   "name": "codex-ui-customizer",
   "displayName": "Codex UI Customizer (Unofficial)",
   "description": "Customize Codex message styling and safely manage standard file-link opening, including Remote-SSH sessions.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "mm-lab",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
@@ -29,6 +29,7 @@
       "restrictedConfigurations": [
         "codexUiCustomizer.autoApply",
         "codexUiCustomizer.fileLinks.enabled",
+        "codexUiCustomizer.plainTextPaste.enabled",
         "codexUiCustomizer.fileLinks.excludedExtensions",
         "codexUiCustomizer.userMessage.background",
         "codexUiCustomizer.userMessage.borderColor",
@@ -63,6 +64,12 @@
     "configuration": {
       "title": "Codex UI Customizer",
       "properties": {
+        "codexUiCustomizer.plainTextPaste.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "Enable Ctrl+Shift+V to insert only clipboard text in the Codex composer, preserving normal Ctrl+V. Run Apply and reload the window. Remove restores the managed WebView module."
+        },
         "codexUiCustomizer.fileLinks.excludedExtensions": {
           "type": "array",
           "default": [],
@@ -80,7 +87,7 @@
         "codexUiCustomizer.autoApply": {
           "type": "boolean",
           "default": true,
-          "description": "Apply CSS and selected file-link customization on startup and configuration/extension changes. Remove suspends automatic application until Apply is run, without changing settings."
+          "description": "Apply CSS, selected file-link handling and plain-text paste on startup and configuration/extension changes. Remove suspends automatic application until Apply is run, without changing settings."
         },
         "codexUiCustomizer.userMessage.background": {
           "type": "string",

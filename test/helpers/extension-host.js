@@ -13,7 +13,8 @@ async function loadExtension(root, fileLinksEnabled = false, options = {}) {
   const lines = [], errors = [], notices = [], executed = [], settingWrites = [];
   const extensionEvents = [], configEvents = [];
   let fileLinks, customizations;
-  const settings = { autoApply: false, "fileLinks.enabled": fileLinksEnabled, ...options.settings };
+  // Older CSS/file-link fixtures omit the WebView module; disable paste there.
+  const settings = { autoApply: false, "fileLinks.enabled": fileLinksEnabled, "plainTextPaste.enabled": false, ...options.settings };
   const channel = { appendLine: s => lines.push(s), clear: () => { lines.length = 0; }, show() {} };
   const information = (message, ...actions) => new Promise(resolve => notices.push({ message, actions, respond: resolve }));
   const disposable = { dispose() {} };
@@ -41,6 +42,9 @@ async function loadExtension(root, fileLinksEnabled = false, options = {}) {
   const sandbox = {
     require: name => {
       if (name === "vscode") return vscode;
+      if (name === "./plain-text-paste") return { PlainTextPasteManager: class extends require("../../plain-text-paste").PlainTextPasteManager {
+        constructor(config) { super({ ...config, storageRoot: path.join(root, "paste-backups") }); }
+      } };
       if (name === "./file-link-controller") return { installFileLinks: (api, context, config) => {
         fileLinks = require("../../file-link-controller").installFileLinks(api, context, {
           ...config, managerOptions: { storageRoot: path.join(root, "backups"), legacyRoot: path.join(root, "legacy") },

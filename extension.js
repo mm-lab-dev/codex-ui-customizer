@@ -7,6 +7,7 @@ const { DEFAULTS, sanitizeStyleConfig } = require("./style");
 const { discoverCssTargets } = require("./css-targets");
 const { installFileLinks } = require("./file-link-controller");
 const { installCustomizations } = require("./customization-controller");
+const { PlainTextPasteManager } = require("./plain-text-paste");
 
 const CODEX_EXTENSION_ID = "openai.chatgpt";
 const START_MARKER = "/* codex-ui-customizer:start */";
@@ -238,7 +239,8 @@ function activate(context) {
   const fileLinks = installFileLinks(vscode, context, { log, getOutput });
   context.subscriptions.push(getOutput());
   customizations = installCustomizations(vscode, context, {
-    fileLinks, applyCss: applyPatch, removeCss: removePatch, inspectCss: showTarget, log, getOutput,
+    fileLinks, plainTextPaste: new PlainTextPasteManager({ getExtension: () => vscode.extensions.getExtension(CODEX_EXTENSION_ID) }),
+    applyCss: applyPatch, removeCss: removePatch, inspectCss: showTarget, log, getOutput,
   });
 }
 

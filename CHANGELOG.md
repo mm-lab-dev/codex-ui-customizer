@@ -1,5 +1,12 @@
 # Change Log
 
+## 0.4.0
+
+- Add Ctrl+Shift+V plain-text paste in the Codex composer, enabled by default and configurable through `plainTextPaste.enabled`.
+- Preserve ordinary Ctrl+V, selection replacement, Unicode, multiline text and undo while excluding clipboard HTML, images and attachments from the plain-text shortcut.
+- Read clipboard text within the WebView before VS Code forwards the key to its host, with sanitized native paste fallback and cancellation after focus loss or other keys.
+- Manage plain-text paste through Apply, Remove and Show Target and Status, with verified backups, shared suspension and Remote-SSH support.
+
 ## 0.3.0
 
 - Add a Settings exclusion list for file-link extensions, with case-insensitive matching and optional leading dots. Excluded links retain the original text handler; list changes take effect on subsequent clicks.

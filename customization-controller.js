@@ -4,7 +4,7 @@ const { CustomizationStore } = require("./customization-store");
 
 const SUSPENDED_KEY = "customizations.suspended";
 
-function installCustomizations(vscode, context, { fileLinks, applyCss, removeCss, inspectCss, log, getOutput, delay = 1200, stateStoreOptions = {} }) {
+function installCustomizations(vscode, context, { fileLinks, plainTextPaste, applyCss, removeCss, inspectCss, log, getOutput, delay = 1200, stateStoreOptions = {} }) {
   const memory = new Map();
   const state = context.globalState ?? { get: key => memory.get(key), update: async (key, value) => memory.set(key, value) };
   let timer, disposed = false, tail = Promise.resolve(), reloadPending = false;
@@ -12,6 +12,8 @@ function installCustomizations(vscode, context, { fileLinks, applyCss, removeCss
   const store = new CustomizationStore({ getExtension: () => vscode.extensions.getExtension("openai.chatgpt"), ...stateStoreOptions });
   const config = () => vscode.workspace.getConfiguration("codexUiCustomizer");
   const selected = () => config().get("fileLinks.enabled", false) === true;
+  const pasteSelected = () => config().get("plainTextPaste.enabled", true) === true;
+  plainTextPaste ??= { inspect: async () => ({ state: "unapplied" }), reconcile: async () => ({ state: "unapplied" }) };
   const automatic = () => config().get("autoApply", true) === true;
   const suspended = () => sharedSuspended;
   const japanese = vscode.env.language?.startsWith("ja");
@@ -53,10 +55,10 @@ function installCustomizations(vscode, context, { fileLinks, applyCss, removeCss
   }
   async function notify(result, explicit) {
     if (disposed) return;
-    const problem = result.css.state === "failed" || ["failed", "unsupported"].includes(result.fileLinks.state);
+    const problem = result.css.state === "failed" || ["failed", "unsupported"].includes(result.fileLinks.state) || result.plainTextPaste.state === "failed";
     if (!explicit && !result.changed && !problem) return;
     const fingerprint = JSON.stringify([result.action, result.css.state, result.css.state === "failed" ? result.css.reason : null,
-      result.fileLinks.state, result.fileLinks.hash, result.fileLinks.reason]);
+      result.fileLinks.state, result.fileLinks.hash, result.fileLinks.reason, result.plainTextPaste.state, result.plainTextPaste.reason]);
     if (!explicit && fingerprint === state.get("customizations.lastNotice")) return;
     await state.update("customizations.lastNotice", fingerprint);
     if (disposed) return;
@@ -80,25 +82,30 @@ function installCustomizations(vscode, context, { fileLinks, applyCss, removeCss
     channel.appendLine(`Automatic application: ${automatic()}; suspended by Remove: ${suspended()}`);
     channel.appendLine(`Settings fileLinks.enabled: ${selected()} (Apply/Remove do not change settings)`);
     channel.appendLine(`Excluded extensions: ${JSON.stringify(config().get("fileLinks.excludedExtensions", []))}`);
+    channel.appendLine(`Settings plainTextPaste.enabled: ${pasteSelected()}`);
   }
   async function inspect() {
     printMode();
     const css = await safe("CSS target detection", inspectCss);
     const links = await safe("File-link inspection", () => fileLinks.inspect(selected()));
+    const paste = await safe("Plain-text paste inspection", () => plainTextPaste.inspect(pasteSelected()));
+    getOutput().appendLine(`Plain-text paste: ${paste.state}; ${paste.reason ?? ""}`);
     if (css.state === "failed") getOutput().appendLine(`CSS: failed; ${css.reason}`);
     const pending = reloadPending || links.state === "reload-pending";
     getOutput().appendLine(`Reload pending in this extension host: ${pending}`);
-    return { action: "inspect", suspended: suspended(), reloadPending: pending, css, fileLinks: links };
+    return { action: "inspect", suspended: suspended(), reloadPending: pending, css, fileLinks: links, plainTextPaste: paste };
   }
   async function reconcile(action, explicit) {
     printMode();
-    // Both features are attempted, even when the first one fails.
+    // All features are attempted, even when an earlier one fails.
     const css = await safe("CSS", action === "remove" ? removeCss : applyCss);
     const links = await safe("File links", () => fileLinks.reconcile(action !== "remove" && selected()));
-    const changed = css.changed === true || links.changed === true;
+    const paste = await safe("Plain-text paste", () => plainTextPaste.reconcile(action !== "remove" && pasteSelected()));
+    getOutput().appendLine(`Plain-text paste: ${paste.state}; ${paste.reason ?? ""}`);
+    const changed = css.changed === true || links.changed === true || paste.changed === true;
     reloadPending ||= changed || links.state === "reload-pending";
-    const result = { action, suspended: suspended(), css, fileLinks: links, changed, reloadPending };
-    log(`Combined ${action}: CSS=${css.state}, file links=${links.state}, changed=${changed}, suspended=${result.suspended}`);
+    const result = { action, suspended: suspended(), css, fileLinks: links, plainTextPaste: paste, changed, reloadPending };
+    log(`Combined ${action}: CSS=${css.state}, file links=${links.state}, plain-text paste=${paste.state}, changed=${changed}, suspended=${result.suspended}`);
     await notify(result, explicit);
     return result;
   }

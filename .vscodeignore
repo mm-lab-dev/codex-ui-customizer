@@ -8,5 +8,6 @@ resources/large-icon.png
 test/**
 .cache/**
 .tmp/**
+.tmp-plain-paste-browser-*/**
 VALIDATION.md
 scripts/**

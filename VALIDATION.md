@@ -1,4 +1,51 @@
-# Standard file-link management validation
+# Customization validation
+
+## Plain-text paste — 0.4.0 — 2026-11-20 (Asia/Tokyo)
+
+Ctrl+Shift+V inserts plain text in the Codex composer.
+`node --test test/*.test.js`: **82 tests passed** with no failures or skips.
+Plain-text paste defaults to enabled in both the manifest and runtime fallback;
+an integration test verifies application with the setting omitted.
+New coverage includes shortcut scoping, IME and modifier exclusions, focus and
+timeout handling, Unicode/newline normalization, image-only no-op, failed native
+insertion fallback, idempotent patching, exact restoration, refusal over edits or
+corrupt backups, unsafe module references, and shared Apply/Remove suspension.
+
+The optional Chromium check uses a real ProseMirror EditorView with history.
+It passed selection replacement, Japanese text, newlines and blank lines,
+literal Markdown, removal of clipboard HTML, caret preservation, native input
+events, editor history undo, and ordinary rich-text paste. The check models
+VS Code's host forwarding, mocks the WebView clipboard API without changing the
+OS clipboard, and delivers no native paste event for Ctrl+Shift+V. It verifies
+that the key is stopped before host forwarding and text is still inserted.
+It does not exercise real OS clipboard access or live VS Code keybinding routing.
+It uses upstream ProseMirror packages, not the full Codex UI.
+The user confirmed successful plain-text paste in local VS Code on 2026-11-20.
+Remote-SSH interaction remains unverified.
+
+To reproduce from PowerShell, keep dependency caches and browser data in the
+repository:
+
+```powershell
+New-Item -ItemType Directory -Force .tmp | Out-Null
+$env:npm_config_cache = Join-Path (Get-Location) '.cache/npm'
+$env:TEMP = Join-Path (Get-Location) '.tmp'
+$env:TMP = $env:TEMP
+npm install --prefix .tmp/pm-browser --ignore-scripts --no-audit --no-fund --no-package-lock prosemirror-model prosemirror-state prosemirror-view prosemirror-history prosemirror-schema-basic
+node scripts/verify-plain-text-paste-browser.cjs 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+```
+
+The check leaves its HTML, isolated browser profile and log in an ignored
+`.tmp-plain-paste-browser-*` directory in the repository.
+
+A repository-local copy of the installed Codex **26.1111.21308 Windows x64**
+WebView entry module was patched, parsed as a complete ES module using Acorn,
+and restored byte-for-byte. The installed Codex files were read only.
+Plain-text paste uses Chromium's `execCommand("insertText")` native editing;
+future Chromium/Codex changes may require compatibility updates. Unsupported
+composer selectors retain native behavior.
+
+## Standard file-link management
 
 Date: 2026-11-16 (Asia/Tokyo). Version: 0.3.0.
 
